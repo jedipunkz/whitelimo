@@ -54,6 +54,13 @@ for part in "$major" "$minor" "$patch"; do
 	esac
 done
 
+# $(( )) reads a leading zero as octal, so v1.2.017 would bump to v1.2.16 --
+# backwards -- and v1.2.08 would abort with a shell error instead of a version.
+# Stripping the zeros first keeps the arithmetic decimal.
+major=$((${major#"${major%%[!0]*}"} + 0))
+minor=$((${minor#"${minor%%[!0]*}"} + 0))
+patch=$((${patch#"${patch%%[!0]*}"} + 0))
+
 case "$bump" in
 major)
 	major=$((major + 1))
