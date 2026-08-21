@@ -75,6 +75,17 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual((folder[.posixPermissions] as? NSNumber)?.int16Value, 0o700)
     }
 
+    func testReplacingAWorldReadableFileStillLeavesItOwnerOnly() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: configURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: configURL.path)
+
+        try ConfigStore(url: configURL).save(sampleConfiguration())
+
+        let file = try FileManager.default.attributesOfItem(atPath: configURL.path)
+        XCTAssertEqual((file[.posixPermissions] as? NSNumber)?.int16Value, 0o600)
+    }
+
     func testSavingTwiceReplacesTheFile() throws {
         let store = ConfigStore(url: configURL)
         try store.save(sampleConfiguration())
