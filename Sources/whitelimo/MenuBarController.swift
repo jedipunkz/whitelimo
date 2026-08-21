@@ -189,7 +189,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             defer { isBusy = false }
             do {
                 let summary = try await model.configure(token: token)
-                model.save()
                 setStatus("Ready")
                 Dialogs.information(AppModel.name, summary)
             } catch {
