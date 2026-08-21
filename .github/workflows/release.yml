@@ -1,0 +1,173 @@
+name: Release
+
+run-name: Release ${{ inputs.bump && format('({0} bump)', inputs.bump) || github.ref_name }}
+
+# There are two ways to cut a release.
+#
+# Run this workflow by hand from the Actions tab and pick patch, minor or major.
+# It works out the next version from the most recent tag, tags the commit it
+# built, and publishes the release. This is the usual way.
+#
+# Or push a version tag yourself, when the version is not simply the next one:
+#
+#     git tag v1.0.0 && git push origin v1.0.0
+#
+# Either way the zipped app ends up on the release page. Tick "dry run" on a
+# manual run to build and package without tagging or publishing anything.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of the version to raise"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      dry_run:
+        description: "Build only: do not tag and do not publish"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-14
+    permissions:
+      # Needed to push the tag and to create the release.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the most recent tag can be found.
+          fetch-depth: 0
+
+      - name: Resolve the version
+        id: meta
+        env:
+          BUMP: ${{ inputs.bump }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            version="$GITHUB_REF_NAME"
+            echo "Releasing the pushed tag $version."
+          else
+            # Only proper vX.Y.Z tags are candidates: a pre-release must not
+            # become the base for the next version.
+            latest=$(git tag --list 'v*' --sort=-v:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | head -n 1 || true)
+            version=$(sh Scripts/next-version.sh "$BUMP" "$latest")
+            echo "Latest release: ${latest:-(none)} -> $BUMP bump -> $version"
+
+            if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+              echo "::error::tag $version already exists"
+              exit 1
+            fi
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # A tag carrying a suffix, such as v1.2.0-rc1, is a pre-release. A
+          # bumped version never has one.
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Dry run: nothing will be tagged or published."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "### $version" >> "$GITHUB_STEP_SUMMARY"
+
+      # A tag push does not run the CI workflow, and a commit that cannot pass
+      # the checks has no business becoming a release.
+      - name: Test
+        run: |
+          swift test
+          sh Scripts/next-version_test.sh
+
+      - name: Build and package
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: sh Scripts/package.sh
+
+      - name: Checksums
+        working-directory: dist
+        run: shasum -a 256 *.zip | tee SHA256SUMS.txt
+
+      - name: Upload the archive as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whitelimo-${{ steps.meta.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      # Only once everything above has passed, so a failed build cannot leave a
+      # tag behind with no release attached to it.
+      #
+      # A tag pushed with GITHUB_TOKEN does not start another workflow run, so
+      # this cannot loop back into the push trigger and release twice.
+      - name: Tag the commit
+        if: github.event_name == 'workflow_dispatch' && steps.meta.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Publish the release
+        if: steps.meta.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          # --notes is prepended to the notes GitHub generates from the commits.
+          NOTES: |
+            Control Nature Remo from the macOS menu bar.
+
+            Download `whitelimo_${{ steps.meta.outputs.version }}_macos_universal.zip`, unzip it and
+            move `whitelimo.app` to your Applications folder. The build is universal: it runs on
+            Apple silicon and on Intel Macs, and needs macOS 13 Ventura or later.
+
+            The app is signed ad hoc rather than with a paid Developer ID, so the first launch has
+            to go through **right-click → Open**, or:
+
+            ```console
+            xattr -dr com.apple.quarantine /Applications/whitelimo.app
+            ```
+
+            On first launch whitelimo asks for a Nature Remo access token, which you can issue at
+            <https://home.nature.global/>.
+
+            Verify the download against `SHA256SUMS.txt`:
+
+            ```console
+            shasum -a 256 -c SHA256SUMS.txt
+            ```
+        run: |
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes "$NOTES" \
+            --generate-notes \
+            --verify-tag \
+            --prerelease="$PRERELEASE" \
+            dist/*.zip dist/SHA256SUMS.txt
+
+          echo "Published $VERSION." >> "$GITHUB_STEP_SUMMARY"

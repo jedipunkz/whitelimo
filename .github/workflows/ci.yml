@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+      - name: Test the release version arithmetic
+        run: sh Scripts/next-version_test.sh
+
+  app:
+    name: Build the app bundle
+    runs-on: macos-14
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bundle is uploaded as a zip made with ditto: the artifact upload
+      # would otherwise flatten the bundle and drop its signature.
+      - name: Build and package whitelimo.app
+        run: sh Scripts/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whitelimo-app
+          path: dist/*.zip
+          if-no-files-found: error
