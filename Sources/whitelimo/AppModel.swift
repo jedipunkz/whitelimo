@@ -182,6 +182,13 @@ final class AppModel {
             let summary = try await MenuExecutor.execute(action, using: client)
             let text = summary.isEmpty ? "\(action.label) sent" : "\(action.label): \(summary)"
             log.write("\(action.kind.rawValue) \(action.applianceID) \(action.value) -> \(text)")
+            if action.kind == .airconMode {
+                // The temperature and fan speed ranges belong to the operation
+                // mode, so the submenus built for the previous one now offer
+                // values this mode rejects. A failure here only leaves the menu
+                // as stale as it already was, so it is not worth reporting.
+                try? await fetchAppliances()
+            }
             return text
         } catch {
             log.write("\(action.kind.rawValue) \(action.applianceID) \(action.value) failed: \(error.localizedDescription)")
