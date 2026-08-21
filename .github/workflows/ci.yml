@@ -1,9 +1,20 @@
 name: CI
 
+# Documentation carries no build, so a change that only touches it skips the
+# whole run rather than spending a pair of macOS runners on it.
 on:
   push:
     branches: ["**"]
+    # Repeated below: GitHub Actions does not resolve YAML anchors.
+    paths-ignore:
+      - "**/*.md"
+      - LICENSE
+      - .gitignore
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - LICENSE
+      - .gitignore
 
 permissions:
   contents: read
