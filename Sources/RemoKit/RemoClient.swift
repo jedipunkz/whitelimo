@@ -128,11 +128,16 @@ public final class RemoClient: @unchecked Sendable {
     private func send(method: String, path: String, form: [String: String]?) async throws -> Data {
         guard !token.isEmpty else { throw RemoError.missingToken }
 
-        guard let url = URL(string: path, relativeTo: baseURL) else {
+        // Joined by hand rather than resolved as a relative reference: a
+        // root-absolute path such as "/1/devices" would replace the whole path
+        // of the base, so a base of https://proxy.example/remo/ would silently
+        // lose its /remo prefix.
+        let base = baseURL.absoluteString
+        guard let url = URL(string: (base.hasSuffix("/") ? String(base.dropLast()) : base) + path) else {
             throw RemoError.transport("cannot build a URL for \(path)")
         }
 
-        var request = URLRequest(url: url.absoluteURL)
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -169,9 +174,20 @@ public final class RemoClient: @unchecked Sendable {
         return data
     }
 
+    /// Escapes an identifier that goes into a path. `.urlPathAllowed` is no use
+    /// here: it lets a slash through, and an id from the API is not something to
+    /// trust with the shape of the URL.
     private func escape(_ component: String) -> String {
-        component.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? component
+        component.addingPercentEncoding(withAllowedCharacters: RemoClient.unreserved) ?? component
     }
+
+    /// The unreserved characters of RFC 3986. Everything else is escaped, in a
+    /// path component and in a form field alike.
+    static let unreserved: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "-._~")
+        return set
+    }()
 
     static let userAgent = "whitelimo (+https://github.com/jedipunkz/whitelimo)"
 
@@ -223,8 +239,7 @@ public final class RemoClient: @unchecked Sendable {
 
     /// Form-encodes the fields, sorted by name so the body is deterministic.
     static func encodeForm(_ fields: [String: String]) -> String {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
+        let allowed = unreserved
         return fields.keys.sorted().map { key in
             let name = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
             let value = fields[key] ?? ""

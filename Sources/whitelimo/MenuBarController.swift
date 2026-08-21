@@ -45,7 +45,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         if !model.configuration.isConfigured {
-            menu.addItem(command("Set Access Token…", #selector(setToken(_:))))
+            menu.addItem(command("Set Access Token…", #selector(setToken(_:)), enabled: !isBusy))
             menu.addItem(command("Get an Access Token…", #selector(openTokenPage(_:))))
         } else if model.configuration.appliances.isEmpty {
             menu.addItem(disabledItem("No appliances fetched yet"))
@@ -57,8 +57,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         if model.configuration.isConfigured {
-            menu.addItem(command("Refresh Appliances", #selector(refreshAppliances(_:))))
-            menu.addItem(command("Set Access Token…", #selector(setToken(_:))))
+            menu.addItem(command("Refresh Appliances", #selector(refreshAppliances(_:)), enabled: !isBusy))
+            menu.addItem(command("Set Access Token…", #selector(setToken(_:)), enabled: !isBusy))
         }
         if !model.configuration.skipped.isEmpty {
             menu.addItem(command(
@@ -120,10 +120,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return item
     }
 
-    private func command(_ title: String, _ selector: Selector) -> NSMenuItem {
+    /// A command item. The ones whose handler bails out while a call is in
+    /// flight pass `enabled: !isBusy`, so they look as dead as they act.
+    private func command(_ title: String, _ selector: Selector, enabled: Bool = true) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
         item.target = self
-        item.isEnabled = true
+        item.isEnabled = enabled
         return item
     }
 
@@ -187,7 +189,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             defer { isBusy = false }
             do {
                 let summary = try await model.configure(token: token)
-                model.save()
                 setStatus("Ready")
                 Dialogs.information(AppModel.name, summary)
             } catch {

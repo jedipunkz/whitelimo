@@ -46,8 +46,15 @@ ok patch v0.9.9 v0.9.10
 ok minor v1.9.0 v1.10.0
 ok patch v1.2.19 v1.2.20
 
-# Leading zeroes and large numbers stay arithmetic.
+# Large numbers stay arithmetic.
 ok patch v10.20.30 v10.20.31
+
+# Leading zeroes are decimal, not octal: v1.2.017 bumps to 18, not to 16, and
+# v1.2.08 is a version rather than a shell error.
+ok patch v1.2.017 v1.2.18
+ok patch v1.2.08 v1.2.9
+ok minor v1.09.2 v1.10.0
+ok patch v01.02.03 v1.2.4
 
 # A pre-release or build suffix on the latest tag is ignored.
 ok patch v1.2.3-rc1 v1.2.4

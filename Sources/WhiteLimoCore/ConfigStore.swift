@@ -113,7 +113,13 @@ public struct ConfigStore: Sendable {
             try data.write(to: temporary, options: .atomic)
             try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
             if manager.fileExists(atPath: url.path) {
-                _ = try manager.replaceItemAt(url, withItemAt: temporary)
+                // .usingNewMetadataOnly, or the permissions of whatever config
+                // file happened to be there before win over the 0600 above.
+                _ = try manager.replaceItemAt(
+                    url,
+                    withItemAt: temporary,
+                    options: .usingNewMetadataOnly
+                )
             } else {
                 try manager.moveItem(at: temporary, to: url)
             }

@@ -4,13 +4,15 @@ import Foundation
 ///
 /// A menu bar app has no console, so the log is the only record of what went
 /// wrong. It is deliberately tiny: one line per event, and the file starts over
-/// once it grows past a megabyte.
+/// once it grows past a megabyte -- while running as well as at launch, because
+/// whitelimo is started at login and left alone for weeks.
 public final class AppLog: @unchecked Sendable {
     /// How large the log may grow before it is started over.
     public static let maximumSize: UInt64 = 1 << 20
 
     private let lock = NSLock()
     private var handle: FileHandle?
+    private var written: UInt64 = 0
     private let formatter: DateFormatter
 
     public private(set) var url: URL?
@@ -19,6 +21,7 @@ public final class AppLog: @unchecked Sendable {
     /// bothering the user with: the messages are dropped instead.
     public init(url: URL?) {
         formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         guard let url else { return }
 
@@ -41,7 +44,7 @@ public final class AppLog: @unchecked Sendable {
             manager.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
         }
         guard let handle = try? FileHandle(forWritingTo: url) else { return }
-        _ = try? handle.seekToEnd()
+        written = (try? handle.seekToEnd()) ?? 0
         self.handle = handle
         self.url = url
     }
@@ -54,8 +57,16 @@ public final class AppLog: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard let handle else { return }
-        let line = "\(formatter.string(from: Date())) \(message)\n"
-        try? handle.write(contentsOf: Data(line.utf8))
+        let line = Data("\(formatter.string(from: Date())) \(message)\n".utf8)
+        try? handle.write(contentsOf: line)
+        written += UInt64(line.count)
+        if written > AppLog.maximumSize {
+            // Truncating in place rather than deleting and recreating keeps the
+            // file's owner-only permissions and the open handle.
+            try? handle.truncate(atOffset: 0)
+            try? handle.seek(toOffset: 0)
+            written = 0
+        }
     }
 
     public func close() {

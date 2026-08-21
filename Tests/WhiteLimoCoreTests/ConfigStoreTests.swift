@@ -75,6 +75,17 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual((folder[.posixPermissions] as? NSNumber)?.int16Value, 0o700)
     }
 
+    func testReplacingAWorldReadableFileStillLeavesItOwnerOnly() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: configURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: configURL.path)
+
+        try ConfigStore(url: configURL).save(sampleConfiguration())
+
+        let file = try FileManager.default.attributesOfItem(atPath: configURL.path)
+        XCTAssertEqual((file[.posixPermissions] as? NSNumber)?.int16Value, 0o600)
+    }
+
     func testSavingTwiceReplacesTheFile() throws {
         let store = ConfigStore(url: configURL)
         try store.save(sampleConfiguration())
@@ -99,6 +110,32 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertNil(configuration.userNickname)
         XCTAssertTrue(configuration.appliances.isEmpty)
         XCTAssertNil(configuration.fetchedAt)
+    }
+
+    func testAnUnknownActionKindCostsTheMenuButNotTheToken() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let json = """
+            {
+              "token": "keep-me",
+              "appliances": [
+                {
+                  "id": "a1",
+                  "nickname": "Fan",
+                  "type": "IR",
+                  "actions": [
+                    {"label": "Swing", "kind": "from_the_future", "appliance_id": "a1", "value": "on"}
+                  ],
+                  "groups": []
+                }
+              ]
+            }
+            """
+        try Data(json.utf8).write(to: configURL)
+
+        let configuration = try ConfigStore(url: configURL).load()
+
+        XCTAssertEqual(configuration.token, "keep-me")
+        XCTAssertTrue(configuration.appliances.isEmpty)
     }
 
     func testABrokenConfigurationFileIsReportedRatherThanIgnored() throws {
