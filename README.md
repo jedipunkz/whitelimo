@@ -1,8 +1,6 @@
 # whitelimo
 
-A menu bar app for macOS that controls [Nature Remo](https://nature.global/) appliances. It is the
-macOS counterpart of [limo](https://github.com/jedipunkz/limo), which does the same job from the
-Windows notification area.
+A menu bar app for macOS that controls [Nature Remo](https://nature.global/) appliances.
 
 Give it an access token and it fetches the appliances registered on your account from the Nature
 Remo Cloud API, then builds a menu for them. The result is cached, so the menu is ready the moment
