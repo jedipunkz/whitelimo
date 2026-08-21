@@ -60,6 +60,17 @@ final class AppLogTests: XCTestCase {
         XCTAssertLessThan(contents.count, 100)
     }
 
+    func testTheLogIsStartedOverWithoutARestart() throws {
+        let log = AppLog(url: logURL)
+        log.write(String(repeating: "x", count: Int(AppLog.maximumSize)))
+        log.write("after the reset")
+        log.close()
+
+        let contents = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(contents.hasSuffix("after the reset\n"), String(contents.prefix(80)))
+        XCTAssertLessThan(contents.count, 100)
+    }
+
     func testALogThatCannotBeOpenedDropsItsMessages() {
         // A path whose parent is a file, not a folder: nothing can be created
         // there, and that must not be fatal.
