@@ -33,6 +33,33 @@ final class RemoClientTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
     }
 
+    func testABaseURLWithAPathKeepsIt() async throws {
+        StubURLProtocol.handler = { _ in .json(#"{"id":"abc","nickname":"jedipunkz"}"#) }
+        let proxied = RemoClient(
+            token: "token",
+            baseURL: URL(string: "https://proxy.example/remo/")!,
+            session: StubURLProtocol.session()
+        )
+
+        _ = try await proxied.me()
+
+        XCTAssertEqual(
+            StubURLProtocol.recorded[0].request.url?.absoluteString,
+            "https://proxy.example/remo/1/users/me"
+        )
+    }
+
+    func testASlashInAnIdentifierCannotReshapeTheURL() async throws {
+        StubURLProtocol.handler = { _ in .json("{}") }
+
+        try await client().sendSignal(id: "../../1/appliances")
+
+        XCTAssertEqual(
+            StubURLProtocol.recorded[0].request.url?.absoluteString,
+            "https://api.example.test/1/signals/..%2F..%2F1%2Fappliances/send"
+        )
+    }
+
     func testAppliancesDecodesEveryApplianceShape() async throws {
         StubURLProtocol.handler = { _ in .json(Fixtures.appliances) }
 
