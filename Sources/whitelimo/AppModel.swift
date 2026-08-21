@@ -136,6 +136,15 @@ final class AppModel {
         let candidate = RemoClient(token: token)
         let user = try await candidate.me()
 
+        if token != configuration.token {
+            // A new token may belong to a different account, and the cached menu
+            // names appliances that account does not own. Dropping it here means
+            // a fetch that fails below leaves an empty menu rather than one that
+            // sends every click to the wrong appliance.
+            configuration.appliances = []
+            configuration.skipped = []
+            configuration.fetchedAt = nil
+        }
         configuration.token = token
         configuration.userNickname = user.nickname
         client = candidate
