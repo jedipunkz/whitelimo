@@ -48,8 +48,11 @@ public struct Configuration: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         token = try container.decodeIfPresent(String.self, forKey: .token) ?? ""
         userNickname = try container.decodeIfPresent(String.self, forKey: .userNickname)
-        appliances = try container.decodeIfPresent([ApplianceMenu].self, forKey: .appliances) ?? []
-        skipped = try container.decodeIfPresent([SkippedAppliance].self, forKey: .skipped) ?? []
+        // The menu is only a cache, and a newer whitelimo may have written an
+        // action kind this one does not know. Losing the cache costs a refresh;
+        // throwing here would cost the token stored alongside it.
+        appliances = (try? container.decodeIfPresent([ApplianceMenu].self, forKey: .appliances)) ?? []
+        skipped = (try? container.decodeIfPresent([SkippedAppliance].self, forKey: .skipped)) ?? []
         fetchedAt = try container.decodeIfPresent(Date.self, forKey: .fetchedAt)
     }
 

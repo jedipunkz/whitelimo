@@ -112,6 +112,32 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertNil(configuration.fetchedAt)
     }
 
+    func testAnUnknownActionKindCostsTheMenuButNotTheToken() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let json = """
+            {
+              "token": "keep-me",
+              "appliances": [
+                {
+                  "id": "a1",
+                  "nickname": "Fan",
+                  "type": "IR",
+                  "actions": [
+                    {"label": "Swing", "kind": "from_the_future", "appliance_id": "a1", "value": "on"}
+                  ],
+                  "groups": []
+                }
+              ]
+            }
+            """
+        try Data(json.utf8).write(to: configURL)
+
+        let configuration = try ConfigStore(url: configURL).load()
+
+        XCTAssertEqual(configuration.token, "keep-me")
+        XCTAssertTrue(configuration.appliances.isEmpty)
+    }
+
     func testABrokenConfigurationFileIsReportedRatherThanIgnored() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data("{ not json".utf8).write(to: configURL)
