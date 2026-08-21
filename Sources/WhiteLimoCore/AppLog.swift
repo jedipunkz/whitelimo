@@ -19,6 +19,7 @@ public final class AppLog: @unchecked Sendable {
     /// bothering the user with: the messages are dropped instead.
     public init(url: URL?) {
         formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         guard let url else { return }
 
